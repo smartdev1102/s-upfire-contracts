@@ -5,7 +5,7 @@ pragma solidity 0.8.9;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-contract FarmFactory is Ownable {
+contract Factory is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
     
     EnumerableSet.AddressSet private farms;

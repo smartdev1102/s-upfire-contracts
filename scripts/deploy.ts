@@ -31,3 +31,6 @@ main().catch((error) => {
 });
 
 
+// factory =>  0x1EB659a683a27b5205626BBe596CfE0Ea999E315
+// generator =>  0xBadE108Ee900883f5Fb9f4A1b54eAFCF6c9D3001
+// reward token =>  0x2A84A252b129489Bc7834B483a4Ba370cA403F19
