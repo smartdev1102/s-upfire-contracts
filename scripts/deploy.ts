@@ -1,18 +1,33 @@
+import { parseEther } from "ethers/lib/utils";
 import { ethers } from "hardhat";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  const Factory = await ethers.getContractFactory("Factory");
+  const factory = await Factory.deploy();
+  await factory.deployed();
 
-  const lockedAmount = ethers.utils.parseEther("1");
+  console.log("factory => ",factory.address);
+  const [owner] = await ethers.getSigners();
+  const Generator = await ethers.getContractFactory("FarmGenerator");
+  const generator = await Generator.deploy(
+    factory.address,
+    owner.address,
+    10,
+    10
+  );
+  await generator.deployed();
+  console.log("generator => ", generator.address);
 
-  const Lock = await ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  const LPToken = await ethers.getContractFactory("LPToken");
+  const lptoken = await LPToken.deploy(parseEther("1000000"));
+  await lptoken.deployed();
+  console.log("lptoken => ", lptoken.address);
 
-  await lock.deployed();
-
-  console.log("Lock with 1 ETH deployed to:", lock.address);
+  const Token = await ethers.getContractFactory("ERC20Mock");
+  const token = await Token.deploy(parseEther("1000000"));
+  await token.deployed();
+  console.log("reward token => ", token.address);
+  
 }
 
 // We recommend this pattern to be able to use async/await everywhere
