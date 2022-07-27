@@ -1,353 +1,251 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+pragma solidity 0.8.9;
+
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+import "./interfaces/IFactory.sol";
 
 contract Farm {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    // Info of each user.
+    /// @notice information stuct on each user than stakes LP tokens.
     struct UserInfo {
         uint256 amount; // How many LP tokens the user has provided.
-        uint256 rewardDebt; // Reward debt. See explanation below.
+        uint256 rewardDebt; // Reward debt.
     }
 
-    // Info of each pool.
-    struct PoolInfo {
-        IERC20 lpToken; // Address of LP token contract.
-        uint256 allocPoint; // How many allocation points assigned to this pool. ERC20s to distribute per block.
-        uint256 lastRewardBlock; // Last block number that ERC20s distribution occurs.
-        uint256 accERC20PerShare; // Accumulated ERC20s per share, times 1e36.
+    /// @notice all the settings for this farm in one struct
+    struct FarmInfo {
+        IERC20 lpToken;
+        IERC20 rewardToken;
+        uint256 startBlock;
+        uint256 blockReward;
+        uint256 bonusEndBlock;
+        uint256 bonus;
+        uint256 endBlock;
+        uint256 lastRewardBlock; // Last block number that reward distribution occurs.
+        uint256 accRewardPerShare; // Accumulated Rewards per share, times 1e12
+        uint256 farmableSupply; // set in init, total amount of tokens farmable
+        uint256 numFarmers;
     }
 
-    // Address of the ERC20 Token contract.
-    IERC20 public erc20;
-    // The total amount of ERC20 that's paid out as reward.
-    uint256 public paidOut = 0;
-    // ERC20 tokens rewarded per block.
-    uint256 public rewardPerBlock;
+    /// @notice farm type id. Useful for back-end systems to know how to read the contract (ABI) as we plan to launch multiple farm types
+    uint256 public farmType = 1;
 
-    // Info of each pool.
-    PoolInfo[] public poolInfo;
-    // Info of each user that stakes LP tokens.
-    mapping(uint256 => mapping(address => UserInfo)) public userInfo;
-    // Total allocation points. Must be the sum of all allocation points in all pools.
-    uint256 public totalAllocPoint = 0;
+    IFactory public factory;
+    address public farmGenerator;
 
-    // The block number when farming starts.
-    uint256 public startBlock;
-    // The block number when farming ends.
-    uint256 public endBlock;
+    FarmInfo public farmInfo;
 
-    address public owner;
-    address public devaddr;
-    uint256 public devfee;
-    uint256 public referralfee;
-    uint256 public referralFund;
-    mapping(address => bytes) signatures;
+    /// @notice information on each user than stakes LP tokens
+    mapping(address => UserInfo) public userInfo;
 
-    event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
-    event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
-    event EmergencyWithdraw(
-        address indexed user,
-        uint256 indexed pid,
-        uint256 amount
-    );
+    event Deposit(address indexed user, uint256 amount);
+    event Withdraw(address indexed user, uint256 amount);
+    event EmergencyWithdraw(address indexed user, uint256 amount);
 
-    constructor(
-        IERC20 _erc20,
-        uint256 _rewardPerBlock,
-        uint256 _startBlock,
-        address _devaddr,
-        address _owner,
-        uint256 _devfee,
-        uint256 _referralfee
-    ) {
-        erc20 = _erc20;
-        rewardPerBlock = _rewardPerBlock;
-        startBlock = _startBlock;
-        endBlock = _startBlock;
-        devaddr = _devaddr;
-        owner = _owner;
-        devfee = _devfee;
-        referralfee = _referralfee;
+    constructor(address _factory, address _farmGenerator) {
+        factory = IFactory(_factory);
+        farmGenerator = _farmGenerator;
     }
 
-    // Number of LP pools
-    function poolLength() external view returns (uint256) {
-        return poolInfo.length;
-    }
-
-    // Fund the farm, increase the end block
-    function fund(uint256 _amount, bool withReferral) public {
-        require(block.number < endBlock, "fund: too late, the farm is closed");
-        uint256 realAmount = _amount;
-        if (!withReferral) {
-            uint256 devAmount = realAmount.mul(devfee).div(100);
-            erc20.safeTransferFrom(msg.sender, devaddr, devAmount);
-            realAmount = realAmount.sub(devAmount);
-        } else {
-            uint256 devAmount = realAmount.mul(devfee.sub(referralfee)).div(
-                100
-            );
-            uint256 referralAmount = realAmount.mul(referralfee).div(100);
-            erc20.safeTransferFrom(msg.sender, devaddr, devAmount);
-            referralFund = referralFund.add(referralAmount);
-            realAmount = realAmount.sub(devAmount).sub(referralAmount);
-        }
-        erc20.safeTransferFrom(address(msg.sender), address(this), realAmount);
-        endBlock += realAmount.div(rewardPerBlock);
-    }
-
-    // Add a new lp to the pool. Can only be called by the owner.
-    // DO NOT add the same LP token more than once. Rewards will be messed up if you do.
-    function add(
-        uint256 _allocPoint,
+    /**
+     * @notice initialize the farming contract. This is called only once upon farm creation and the FarmGenerator ensures the farm has the correct paramaters
+     */
+    function init(
+        IERC20 _rewardToken,
+        uint256 _amount,
         IERC20 _lpToken,
-        bool _withUpdate
+        uint256 _blockReward,
+        uint256 _startBlock,
+        uint256 _endBlock,
+        uint256 _bonusEndBlock,
+        uint256 _bonus
     ) public {
-        if (_withUpdate) {
-            massUpdatePools();
-        }
-        uint256 lastRewardBlock = block.number > startBlock
+        require(msg.sender == address(farmGenerator), "FORBIDDEN");
+
+        _rewardToken.safeTransferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
+        farmInfo.rewardToken = _rewardToken;
+
+        farmInfo.startBlock = _startBlock;
+        farmInfo.blockReward = _blockReward;
+        farmInfo.bonusEndBlock = _bonusEndBlock;
+        farmInfo.bonus = _bonus;
+
+        uint256 lastRewardBlock = block.number > _startBlock
             ? block.number
-            : startBlock;
-        totalAllocPoint = totalAllocPoint.add(_allocPoint);
-        poolInfo.push(
-            PoolInfo({
-                lpToken: _lpToken,
-                allocPoint: _allocPoint,
-                lastRewardBlock: lastRewardBlock,
-                accERC20PerShare: 0
-            })
-        );
+            : _startBlock;
+        farmInfo.lpToken = _lpToken;
+        farmInfo.lastRewardBlock = lastRewardBlock;
+        farmInfo.accRewardPerShare = 0;
+
+        farmInfo.endBlock = _endBlock;
+        farmInfo.farmableSupply = _amount;
     }
 
-    // Update the given pool's ERC20 allocation point. Can only be called by the owner.
-    function set(
-        uint256 _pid,
-        uint256 _allocPoint,
-        bool _withUpdate
-    ) public {
-        require(msg.sender == owner, "You're not owner.");
-        if (_withUpdate) {
-            massUpdatePools();
+    /**
+     * @notice Gets the reward multiplier over the given _from_block until _to block
+     * @param _from_block the start of the period to measure rewards for
+     * @param _to the end of the period to measure rewards for
+     * @return The weighted multiplier for the given period
+     */
+    function getMultiplier(uint256 _from_block, uint256 _to)
+        public
+        view
+        returns (uint256)
+    {
+        uint256 _from = _from_block >= farmInfo.startBlock
+            ? _from_block
+            : farmInfo.startBlock;
+        uint256 to = farmInfo.endBlock > _to ? _to : farmInfo.endBlock;
+        if (to <= farmInfo.bonusEndBlock) {
+            return to.sub(_from).mul(farmInfo.bonus);
+        } else if (_from >= farmInfo.bonusEndBlock) {
+            return to.sub(_from);
+        } else {
+            return
+                farmInfo.bonusEndBlock.sub(_from).mul(farmInfo.bonus).add(
+                    to.sub(farmInfo.bonusEndBlock)
+                );
         }
-        totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(
-            _allocPoint
-        );
-        poolInfo[_pid].allocPoint = _allocPoint;
     }
 
-    // View function to see deposited LP for a user.
-    function deposited(uint256 _pid, address _user)
-        external
-        view
-        returns (uint256)
-    {
-        UserInfo storage user = userInfo[_pid][_user];
-        return user.amount;
-    }
-
-    // View function to see pending ERC20s for a user.
-    function pending(uint256 _pid, address _user)
-        external
-        view
-        returns (uint256)
-    {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][_user];
-        uint256 accERC20PerShare = pool.accERC20PerShare;
-        uint256 lpSupply = pool.lpToken.balanceOf(address(this));
-        uint256 lastBlock = block.number < endBlock ? block.number : endBlock;
-
-        if (
-            lastBlock > pool.lastRewardBlock &&
-            block.number > pool.lastRewardBlock &&
-            lpSupply != 0
-        ) {
-            uint256 nrOfBlocks = lastBlock.sub(pool.lastRewardBlock);
-            uint256 erc20Reward = nrOfBlocks
-                .mul(rewardPerBlock)
-                .mul(pool.allocPoint)
-                .div(totalAllocPoint);
-            accERC20PerShare = accERC20PerShare.add(
-                erc20Reward.mul(1e36).div(lpSupply)
+    /**
+     * @notice function to see accumulated balance of reward token for specified user
+     * @param _user the user for whom unclaimed tokens will be shown
+     * @return total amount of withdrawable reward tokens
+     */
+    function pendingReward(address _user) external view returns (uint256) {
+        UserInfo storage user = userInfo[_user];
+        uint256 accRewardPerShare = farmInfo.accRewardPerShare;
+        uint256 lpSupply = farmInfo.lpToken.balanceOf(address(this));
+        if (block.number > farmInfo.lastRewardBlock && lpSupply != 0) {
+            uint256 multiplier = getMultiplier(
+                farmInfo.lastRewardBlock,
+                block.number
+            );
+            uint256 tokenReward = multiplier.mul(farmInfo.blockReward);
+            accRewardPerShare = accRewardPerShare.add(
+                tokenReward.mul(1e12).div(lpSupply)
             );
         }
-
-        return user.amount.mul(accERC20PerShare).div(1e36).sub(user.rewardDebt);
+        return
+            user.amount.mul(accRewardPerShare).div(1e12).sub(user.rewardDebt);
     }
 
-    // View function for total reward the farm has yet to pay out.
-    function totalPending() external view returns (uint256) {
-        if (block.number <= startBlock) {
-            return 0;
-        }
-
-        uint256 lastBlock = block.number < endBlock ? block.number : endBlock;
-        return rewardPerBlock.mul(lastBlock - startBlock).sub(paidOut);
-    }
-
-    // Update reward variables for all pools. Be careful of gas spending!
-    function massUpdatePools() public {
-        uint256 length = poolInfo.length;
-        for (uint256 pid = 0; pid < length; ++pid) {
-            updatePool(pid);
-        }
-    }
-
-    // Update reward variables of the given pool to be up-to-date.
-    function updatePool(uint256 _pid) public {
-        PoolInfo storage pool = poolInfo[_pid];
-        uint256 lastBlock = block.number < endBlock ? block.number : endBlock;
-
-        if (lastBlock <= pool.lastRewardBlock) {
+    /**
+     * @notice updates pool information to be up to date to the current block
+     */
+    function updatePool() public {
+        if (block.number <= farmInfo.lastRewardBlock) {
             return;
         }
-        uint256 lpSupply = pool.lpToken.balanceOf(address(this));
+        uint256 lpSupply = farmInfo.lpToken.balanceOf(address(this));
         if (lpSupply == 0) {
-            pool.lastRewardBlock = lastBlock;
+            farmInfo.lastRewardBlock = block.number < farmInfo.endBlock
+                ? block.number
+                : farmInfo.endBlock;
             return;
         }
-
-        uint256 nrOfBlocks = lastBlock.sub(pool.lastRewardBlock);
-        uint256 erc20Reward = nrOfBlocks
-            .mul(rewardPerBlock)
-            .mul(pool.allocPoint)
-            .div(totalAllocPoint);
-
-        pool.accERC20PerShare = pool.accERC20PerShare.add(
-            erc20Reward.mul(1e36).div(lpSupply)
+        uint256 multiplier = getMultiplier(
+            farmInfo.lastRewardBlock,
+            block.number
         );
-        pool.lastRewardBlock = block.number;
+        uint256 tokenReward = multiplier.mul(farmInfo.blockReward);
+        farmInfo.accRewardPerShare = farmInfo.accRewardPerShare.add(
+            tokenReward.mul(1e12).div(lpSupply)
+        );
+        farmInfo.lastRewardBlock = block.number < farmInfo.endBlock
+            ? block.number
+            : farmInfo.endBlock;
     }
 
-    // Deposit LP tokens to Farm for ERC20 allocation.
-    function deposit(uint256 _pid, uint256 _amount) public {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        updatePool(_pid);
+    /**
+     * @notice deposit LP token function for msg.sender
+     * @param _amount the total deposit amount
+     */
+    function deposit(uint256 _amount) public {
+        UserInfo storage user = userInfo[msg.sender];
+        updatePool();
         if (user.amount > 0) {
-            uint256 pendingAmount = user
+            uint256 pending = user
                 .amount
-                .mul(pool.accERC20PerShare)
-                .div(1e36)
+                .mul(farmInfo.accRewardPerShare)
+                .div(1e12)
                 .sub(user.rewardDebt);
-            erc20Transfer(msg.sender, pendingAmount);
+            safeRewardTransfer(msg.sender, pending);
         }
-        pool.lpToken.safeTransferFrom(
+        if (user.amount == 0 && _amount > 0) {
+            factory.userEnteredFarm(msg.sender);
+            farmInfo.numFarmers++;
+        }
+        farmInfo.lpToken.safeTransferFrom(
             address(msg.sender),
             address(this),
             _amount
         );
         user.amount = user.amount.add(_amount);
-        user.rewardDebt = user.amount.mul(pool.accERC20PerShare).div(1e36);
-        emit Deposit(msg.sender, _pid, _amount);
+        user.rewardDebt = user.amount.mul(farmInfo.accRewardPerShare).div(1e12);
+        emit Deposit(msg.sender, _amount);
     }
 
-    // Withdraw LP tokens from Farm.
-    function withdraw(uint256 _pid, uint256 _amount) public {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        require(
-            user.amount >= _amount,
-            "withdraw: can't withdraw more than deposit"
-        );
-        updatePool(_pid);
-        uint256 pendingAmount = user
+    /**
+     * @notice withdraw LP token function for msg.sender
+     * @param _amount the total withdrawable amount
+     */
+    function withdraw(uint256 _amount) public {
+        UserInfo storage user = userInfo[msg.sender];
+        require(user.amount >= _amount, "INSUFFICIENT");
+        updatePool();
+        if (user.amount == _amount && _amount > 0) {
+            factory.userLeftFarm(msg.sender);
+            farmInfo.numFarmers--;
+        }
+        uint256 pending = user
             .amount
-            .mul(pool.accERC20PerShare)
-            .div(1e36)
+            .mul(farmInfo.accRewardPerShare)
+            .div(1e12)
             .sub(user.rewardDebt);
-        erc20Transfer(msg.sender, pendingAmount);
+        safeRewardTransfer(msg.sender, pending);
         user.amount = user.amount.sub(_amount);
-        user.rewardDebt = user.amount.mul(pool.accERC20PerShare).div(1e36);
-        pool.lpToken.safeTransfer(address(msg.sender), _amount);
-        emit Withdraw(msg.sender, _pid, _amount);
+        user.rewardDebt = user.amount.mul(farmInfo.accRewardPerShare).div(1e12);
+        farmInfo.lpToken.safeTransfer(address(msg.sender), _amount);
+        emit Withdraw(msg.sender, _amount);
     }
 
-    // Withdraw without caring about rewards. EMERGENCY ONLY.
-    function emergencyWithdraw(uint256 _pid) public {
-        PoolInfo storage pool = poolInfo[_pid];
-        UserInfo storage user = userInfo[_pid][msg.sender];
-        pool.lpToken.safeTransfer(address(msg.sender), user.amount);
-        emit EmergencyWithdraw(msg.sender, _pid, user.amount);
+    /**
+     * @notice emergency functoin to withdraw LP tokens and forego harvest rewards. Important to protect users LP tokens
+     */
+    function emergencyWithdraw() public {
+        UserInfo storage user = userInfo[msg.sender];
+        farmInfo.lpToken.safeTransfer(address(msg.sender), user.amount);
+        emit EmergencyWithdraw(msg.sender, user.amount);
+        if (user.amount > 0) {
+            factory.userLeftFarm(msg.sender);
+            farmInfo.numFarmers--;
+        }
         user.amount = 0;
         user.rewardDebt = 0;
     }
 
-    // Transfer ERC20 and update the required ERC20 to payout all rewards
-    function erc20Transfer(address _to, uint256 _amount) internal {
-        erc20.transfer(_to, _amount);
-        paidOut += _amount;
-    }
-
-    function storeSignature(address _receiver, bytes memory signature) public {
-        signatures[_receiver] = signature;
-    }
-
-    function claimReferral(address _signer, uint256 _amount, string memory _code) public {
-        bytes32 messageHash = getMessageHash(_signer, _amount, _code);
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
-        require(
-            recoverSigner(ethSignedMessageHash, signatures[msg.sender]) == _signer,
-            "You didn't sign."
-        );
-        require(_amount <= referralFund, "Invalid amount");
-        referralFund = referralFund.sub(_amount);
-        erc20.safeTransferFrom(address(this), msg.sender, _amount);
-    }
-
-    function getMessageHash(address _signer, uint256 _amount, string memory _code)
-        public
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encodePacked(_signer, _amount, _code));
-    }
-
-    function getEthSignedMessageHash(bytes32 _messageHash)
-        public
-        pure
-        returns (bytes32)
-    {
-        return
-            keccak256(
-                abi.encodePacked(
-                    "\x19Ethereum Signed Message:\n32",
-                    _messageHash
-                )
-            );
-    }
-
-    function recoverSigner(
-        bytes32 _ethSignedMessageHash,
-        bytes memory _signature
-    ) public pure returns (address) {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-
-        return ecrecover(_ethSignedMessageHash, v, r, s);
-    }
-
-    function splitSignature(bytes memory sig)
-        public
-        pure
-        returns (
-            bytes32 r,
-            bytes32 s,
-            uint8 v
-        )
-    {
-        require(sig.length == 65, "invalid signature length");
-
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
+    /**
+     * @notice Safe reward transfer function, just in case a rounding error causes pool to not have enough reward tokens
+     * @param _to the user address to transfer tokens to
+     * @param _amount the total amount of tokens to transfer
+     */
+    function safeRewardTransfer(address _to, uint256 _amount) internal {
+        uint256 rewardBal = farmInfo.rewardToken.balanceOf(address(this));
+        if (_amount > rewardBal) {
+            farmInfo.rewardToken.transfer(_to, rewardBal);
+        } else {
+            farmInfo.rewardToken.transfer(_to, _amount);
         }
     }
 }

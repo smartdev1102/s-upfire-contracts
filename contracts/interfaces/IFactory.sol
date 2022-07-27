@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.9;
+
+interface IFactory {
+    function registerFarm(address _farmAddress) external;
+
+    function userEnteredFarm(address _user) external;
+
+    function userLeftFarm(address _user) external;
+}

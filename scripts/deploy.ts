@@ -36,3 +36,9 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
+
+
+// factory =>  0xE34988e37F58966CcBf8D80CcB33278926E3Bac7
+// generator =>  0x1b3B9Bb55662cc56fAf600eABcd1649f54559d34
+// lptoken =>  0x7c7fea6F156ca519f71F5e59E8b2f7f2bbF18290
+// reward token =>  0x85ac1abD25886b4F8779BF31490083C96BBafDa8
