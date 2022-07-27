@@ -7,21 +7,14 @@ async function main() {
   await factory.deployed();
 
   console.log("factory => ",factory.address);
-  const [owner] = await ethers.getSigners();
+
   const Generator = await ethers.getContractFactory("FarmGenerator");
   const generator = await Generator.deploy(
     factory.address,
-    owner.address,
-    10,
-    10
+    "0xc35DADB65012eC5796536bD9864eD8773aBc74C4" // swap factory on bsc test net
   );
   await generator.deployed();
   console.log("generator => ", generator.address);
-
-  const LPToken = await ethers.getContractFactory("LPToken");
-  const lptoken = await LPToken.deploy(parseEther("1000000"));
-  await lptoken.deployed();
-  console.log("lptoken => ", lptoken.address);
 
   const Token = await ethers.getContractFactory("ERC20Mock");
   const token = await Token.deploy(parseEther("1000000"));
@@ -38,7 +31,3 @@ main().catch((error) => {
 });
 
 
-// factory =>  0xE34988e37F58966CcBf8D80CcB33278926E3Bac7
-// generator =>  0x1b3B9Bb55662cc56fAf600eABcd1649f54559d34
-// lptoken =>  0x7c7fea6F156ca519f71F5e59E8b2f7f2bbF18290
-// reward token =>  0x85ac1abD25886b4F8779BF31490083C96BBafDa8
