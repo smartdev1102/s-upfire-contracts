@@ -220,22 +220,10 @@ contract FarmGenerator is Ownable {
             _withReferral
         );
 
-        // require(msg.value == gFees.ethFee, "Fee not met");
-        // devaddr.transfer(msg.value);
-
-        // if (gFees.useGasToken) {
-        //     IERC20(address(gFees.gasToken)).safeTransferFrom(
-        //         address(msg.sender),
-        //         address(this),
-        //         gFees.gasFee
-        //     );
-        //     gFees.gasToken.burn(gFees.gasFee);
-        // }
-
         _rewardToken.safeTransferFrom(
             address(msg.sender),
             address(this),
-            params.requiredAmount.add(params.referralFee)
+            params.referralFee
         );
 
         _rewardToken.safeTransferFrom(
@@ -247,7 +235,14 @@ contract FarmGenerator is Ownable {
             msg.sender
         ][address(_rewardToken)].add(params.referralFee);
         Farm newFarm = new Farm(address(factory), address(this));
-        _rewardToken.safeApprove(address(newFarm), params.requiredAmount);
+        require(
+            _rewardToken.transferFrom(
+                msg.sender,
+                address(newFarm),
+                params.requiredAmount
+            ),
+            "Token transfer failed."
+        );
         newFarm.init(
             _rewardToken,
             params.requiredAmount,
@@ -259,7 +254,6 @@ contract FarmGenerator is Ownable {
             _bonus
         );
 
-        _rewardToken.safeTransfer(devaddr, params.amountFee);
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
     }
@@ -282,7 +276,9 @@ contract FarmGenerator is Ownable {
             "You didn't sign."
         );
         require(_amount <= referralFund[_signer][_token], "Invalid amount");
-        referralFund[_signer][_token] = referralFund[_signer][_token].sub(_amount);
+        referralFund[_signer][_token] = referralFund[_signer][_token].sub(
+            _amount
+        );
         IERC20(_token).safeTransferFrom(address(this), msg.sender, _amount);
     }
 

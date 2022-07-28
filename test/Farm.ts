@@ -17,64 +17,19 @@ describe("Farm", function () {
     const MockToken = await ethers.getContractFactory("ERC20Mock");
     const mockToken = await MockToken.deploy(parseEther("1000"));
 
-    const Farm = await ethers.getContractFactory("Farm");
-    const farm = await Farm.deploy(mockToken.address, owner.address);
-    return { lptoken, mockToken, farm, owner, user1, user2 };
+    const Factory = await ethers.getContractFactory("Factory");
+    const factory = await Factory.deploy();
+
+    const Generator = await ethers.getContractFactory("FarmGenerator");
+    const generator = await Generator.deploy(factory.address, "");
+    return { lptoken, mockToken, factory, generator, owner, user1, user2 };
   }
 
   describe("add pool", function () {
     it("Should send 5% fee to dev address", async function () {
-      const { lptoken, mockToken, farm, owner, user1, user2 } = await loadFixture(deployFixture);
-      await mockToken.transfer(user1.address, parseEther("1000"));
-      const startTime = await time.latest();
-      await mockToken.connect(user1).approve(farm.address, parseEther("1000"));
-      await farm.connect(user1).add(
-        100,
-        lptoken.address,
-        startTime,
-        parseEther("1000"),
-        false
-      );
-      const balance = await mockToken.balanceOf(owner.address);
-      console.log(formatEther(balance))
-      expect(formatEther(balance)).to.eq("50.0"); // 5%
-    });
-    it("Should send 4% fee to dev address when create pool with referral", async function () {
-      const { lptoken, mockToken, farm, owner, user1, user2 } = await loadFixture(deployFixture);
-      await mockToken.transfer(user1.address, parseEther("1000"));
-      const startTime = await time.latest();
-      await mockToken.connect(user1).approve(farm.address, parseEther("1000"));
-      await farm.connect(user1).add(
-        100,
-        lptoken.address,
-        startTime,
-        parseEther("1000"),
-        true
-      );
-      const balance = await mockToken.balanceOf(owner.address);
-      console.log(formatEther(balance))
-      expect(formatEther(balance)).to.eq("40.0"); // 5%
-    });
-    it("Should be allow to deposit", async function () {
-      const { lptoken, mockToken, farm, owner, user1, user2 } = await loadFixture(deployFixture);
-      await mockToken.transfer(user1.address, parseEther("1000"));
-      const startTime = await time.latest();
-      await mockToken.connect(user1).approve(farm.address, parseEther("1000"));
-      await farm.connect(user1).add(
-        100,
-        lptoken.address,
-        startTime,
-        parseEther("1000"),
-        false
-      );
-      const poolLength = await farm.poolLength();
-      expect(poolLength).to.eq(1);
-      const pool = await farm.poolInfo(0);
-      expect(pool.lpToken).to.eq(lptoken.address);
-      // deposit
-      await lptoken.transfer(user2.address, parseEther("1000"));
-      await lptoken.connect(user2).approve(farm.address, parseEther("1000"));
+      const { lptoken, mockToken, generator, owner, user1, user2 } = await loadFixture(deployFixture);
       
     });
+    
   });
 });

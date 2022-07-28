@@ -67,11 +67,11 @@ contract Farm {
     ) public {
         require(msg.sender == address(farmGenerator), "FORBIDDEN");
 
-        _rewardToken.safeTransferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
+        // _rewardToken.safeTransferFrom(
+        //     msg.sender,
+        //     address(this),
+        //     _amount
+        // );
         farmInfo.rewardToken = _rewardToken;
 
         farmInfo.startBlock = _startBlock;
