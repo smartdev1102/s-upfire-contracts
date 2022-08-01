@@ -23,6 +23,8 @@ contract FarmGenerator is Ownable {
     address payable devaddr;
     mapping(address => mapping(address => uint256)) public referralFund;
     mapping(address => bytes) signatures;
+    mapping(bytes => uint256) referralAmounts;
+    mapping(bytes => address) referralTokens;
 
     struct FeeStruct {
         IERCBurn gasToken;
@@ -258,37 +260,50 @@ contract FarmGenerator is Ownable {
         return (address(newFarm));
     }
 
-    function storeSignature(address _receiver, bytes memory signature) public {
-        signatures[_receiver] = signature;
+    function storeReferralInfo(
+        bytes memory signature,
+        uint256 _amount,
+        address _token
+    ) public {
+        signatures[msg.sender] = signature;
+        referralAmounts[signature] = _amount;
+        referralTokens[signature] = _token;
     }
 
-    function claimReferral(
-        address _signer,
-        address _token,
-        uint256 _amount,
-        string memory _code
-    ) public {
-        bytes32 messageHash = getMessageHash(_signer, _token, _amount, _code);
+    function claimReferral(address _signer, string memory _code) public {
+        bytes32 messageHash = getMessageHash(
+            _signer,
+            referralAmounts[signatures[_signer]],
+            _code
+        );
         bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
         require(
-            recoverSigner(ethSignedMessageHash, signatures[msg.sender]) ==
-                _signer,
+            recoverSigner(ethSignedMessageHash, signatures[_signer]) == _signer,
             "You didn't sign."
         );
-        require(_amount <= referralFund[_signer][_token], "Invalid amount");
-        referralFund[_signer][_token] = referralFund[_signer][_token].sub(
-            _amount
+        require(
+            referralAmounts[signatures[_signer]] <=
+                referralFund[_signer][referralTokens[signatures[_signer]]],
+            "Invalid amount"
         );
-        IERC20(_token).safeTransferFrom(address(this), msg.sender, _amount);
+        referralFund[_signer][
+            referralTokens[signatures[_signer]]
+        ] = referralFund[_signer][referralTokens[signatures[_signer]]].sub(
+            referralAmounts[signatures[_signer]]
+        );
+        IERC20(referralTokens[signatures[_signer]]).safeTransferFrom(
+            address(this),
+            msg.sender,
+            referralAmounts[signatures[_signer]]
+        );
     }
 
     function getMessageHash(
         address _signer,
-        address _token,
         uint256 _amount,
         string memory _code
     ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_signer, _token, _amount, _code));
+        return keccak256(abi.encodePacked(_signer, _amount, _code));
     }
 
     function getEthSignedMessageHash(bytes32 _messageHash)
