@@ -33,6 +33,6 @@ main().catch((error) => {
 });
 
 
-// factory =>  0x1CA19537511171B4ce1f3d5Bd2785F7277BC4616
-// generator =>  0x4f43f67E059aa56fd038A590A43a906b59CbB581
-// reward token =>  0xafdC15eD96544f4Dc7bB3997f723A3F333eEE994
+// factory =>  0xfeaB072417019a9b2Dc1c6940c31845354a3d0E7
+// generator =>  0xd5649a4a5AdbcD6a0b25972DD907761d5f4648e4
+// reward token =>  0x0100e4D763bA57C0DCAa5E3D4cBb5A51f65e2846

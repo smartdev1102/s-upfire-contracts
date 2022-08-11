@@ -18,10 +18,10 @@ async function main() {
 
   await factory.adminAllowFarmGenerator(generator.address, true);
 
-  // const Token = await ethers.getContractFactory("ERC20Mock");
-  // const token = await Token.deploy(parseEther("1000000"));
-  // await token.deployed();
-  // console.log("reward token => ", token.address);
+  const Token = await ethers.getContractFactory("ERC20Mock");
+  const token = await Token.deploy(parseEther("1000000"));
+  await token.deployed();
+  console.log("reward token => ", token.address);
   
 }
 
@@ -33,5 +33,6 @@ main().catch((error) => {
 });
 
 
-// factory =>  0x9b5bA1Ff5b3238A2822c665B2E5129bF0308C584
-// generator =>  0x54c5926Ccb210D65C37B8AeDA654F40b72Ee8C0A
+// factory =>  0x666Abb0d4750E5325d887186e3A9DF8df8A86Ca1
+// generator =>  0x2E725ECc8adC90b54E656769d7fD8Be652d1108d
+// reward token =>  0x4Db27e5429438f190d8b98E1a167F4266Fe42dc7

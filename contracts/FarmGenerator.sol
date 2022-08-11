@@ -291,8 +291,7 @@ contract FarmGenerator is Ownable {
         ] = referralFund[_signer][referralTokens[signatures[_signer]]].sub(
             referralAmounts[signatures[_signer]]
         );
-        IERC20(referralTokens[signatures[_signer]]).safeTransferFrom(
-            address(this),
+        IERC20(referralTokens[signatures[_signer]]).safeTransfer(
             msg.sender,
             referralAmounts[signatures[_signer]]
         );
