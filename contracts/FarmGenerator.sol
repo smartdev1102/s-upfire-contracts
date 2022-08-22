@@ -21,11 +21,7 @@ contract FarmGenerator is Ownable {
     IUniFactory public uniswapFactory;
 
     address payable devaddr;
-    mapping(address => mapping(address => uint256)) public referralFund;
-    mapping(address => bytes) signatures;
-    mapping(bytes => uint256) referralAmounts;
-    mapping(bytes => address) referralTokens;
-
+ 
     struct FeeStruct {
         IERCBurn gasToken;
         bool useGasToken; // set to false to waive the gas fee
@@ -96,7 +92,7 @@ contract FarmGenerator is Ownable {
         uint256 _startBlock,
         uint256 _bonusEndBlock,
         uint256 _bonus,
-        bool _withReferral
+        address _referralAddress
     )
         public
         view
@@ -127,14 +123,14 @@ contract FarmGenerator is Ownable {
             nonBonusBlocks
         );
         uint256 requiredAmount = _blockReward.mul(effectiveBlocks);
-        if (_withReferral) {
+        if (_referralAddress != address(0)) {
             return (
                 params.endBlock,
                 requiredAmount,
                 requiredAmount.mul(gFees.tokenFee.sub(gFees.referralFee)).div(
                     1000
                 ),
-                requiredAmount.mul(gFees.referralFee).div(1000)
+                requiredAmount.mul(gFees.referralFee.div(2)).div(1000)
             );
         } else {
             return (
@@ -189,7 +185,7 @@ contract FarmGenerator is Ownable {
         uint256 _startBlock,
         uint256 _bonusEndBlock,
         uint256 _bonus,
-        bool _withReferral
+        address _referralAddress
     ) public payable returns (address) {
         require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
         require(_bonus > 0, "BONUS");
@@ -219,23 +215,22 @@ contract FarmGenerator is Ownable {
             _startBlock,
             _bonusEndBlock,
             _bonus,
-            _withReferral
+            _referralAddress
         );
 
-        _rewardToken.safeTransferFrom(
-            address(msg.sender),
-            address(this),
-            params.referralFee
-        );
-
+        if(params.referralFee > 0) {
+            _rewardToken.safeTransferFrom(
+                address(msg.sender),
+                _referralAddress,
+                params.referralFee
+            );
+        }
         _rewardToken.safeTransferFrom(
             address(msg.sender),
             devaddr,
             params.amountFee
         );
-        referralFund[msg.sender][address(_rewardToken)] = referralFund[
-            msg.sender
-        ][address(_rewardToken)].add(params.referralFee);
+        
         Farm newFarm = new Farm(address(factory), address(this));
         require(
             _rewardToken.transferFrom(
@@ -258,92 +253,5 @@ contract FarmGenerator is Ownable {
 
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
-    }
-
-    function storeReferralInfo(
-        bytes memory signature,
-        uint256 _amount,
-        address _token
-    ) public {
-        signatures[msg.sender] = signature;
-        referralAmounts[signature] = _amount;
-        referralTokens[signature] = _token;
-    }
-
-    function claimReferral(address _signer, string memory _code) public {
-        bytes32 messageHash = getMessageHash(
-            _signer,
-            referralAmounts[signatures[_signer]],
-            _code
-        );
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(messageHash);
-        require(
-            recoverSigner(ethSignedMessageHash, signatures[_signer]) == _signer,
-            "You didn't sign."
-        );
-        require(
-            referralAmounts[signatures[_signer]] <=
-                referralFund[_signer][referralTokens[signatures[_signer]]],
-            "Invalid amount"
-        );
-        referralFund[_signer][
-            referralTokens[signatures[_signer]]
-        ] = referralFund[_signer][referralTokens[signatures[_signer]]].sub(
-            referralAmounts[signatures[_signer]]
-        );
-        IERC20(referralTokens[signatures[_signer]]).safeTransferFrom(
-            address(this),
-            msg.sender,
-            referralAmounts[signatures[_signer]]
-        );
-    }
-
-    function getMessageHash(
-        address _signer,
-        uint256 _amount,
-        string memory _code
-    ) public pure returns (bytes32) {
-        return keccak256(abi.encodePacked(_signer, _amount, _code));
-    }
-
-    function getEthSignedMessageHash(bytes32 _messageHash)
-        public
-        pure
-        returns (bytes32)
-    {
-        return
-            keccak256(
-                abi.encodePacked(
-                    "\x19Ethereum Signed Message:\n32",
-                    _messageHash
-                )
-            );
-    }
-
-    function recoverSigner(
-        bytes32 _ethSignedMessageHash,
-        bytes memory _signature
-    ) public pure returns (address) {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-
-        return ecrecover(_ethSignedMessageHash, v, r, s);
-    }
-
-    function splitSignature(bytes memory sig)
-        public
-        pure
-        returns (
-            bytes32 r,
-            bytes32 s,
-            uint8 v
-        )
-    {
-        require(sig.length == 65, "invalid signature length");
-
-        assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
-        }
     }
 }
