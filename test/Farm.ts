@@ -3,7 +3,7 @@ import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { formatEther, parseEther } from 'ethers/lib/utils';
-import { constants, Signer } from "ethers";
+import { constants, Signer, utils } from "ethers";
 
 describe("Farm", function () {
   // We define a fixture to reuse the same setup in every test.
@@ -27,28 +27,19 @@ describe("Farm", function () {
   describe("add pool", function () {
     it("Should send 5% fee to dev address", async function () {
       const {mockToken, generator, owner, user1, user2 } = await loadFixture(deployFixture);
-      await mockToken.approve(generator.address, parseEther("1000"));
-      const now = await time.latest();
-      const bonusEnd = now + 86400 * 30;
-      const end = now + 86400 * 120;
-      const [blockReward] = await generator.determineBlockReward(
-        parseEther("1000"),
-        now + 86400,
-        bonusEnd,
-        1,
-        end
+      
+      const hash = await generator.getMessageHash(
+        user1.address,
+        parseEther("10"),
+        "111"
       );
-      await generator.createFarm(
-        mockToken.address,
-        parseEther("1000"),
-        owner.address,
-        Number(blockReward),
-        now + 86400,
-        bonusEnd,
-        1,
-        false
+      const sig = await user1.signMessage(utils.arrayify(hash));
+      await generator.connect(user1).storeReferralInfo(
+        sig,
+        parseEther("10"),
+        mockToken.address
       );
-
+      await generator.connect(user2).claimReferral(user1.address, "111");
     });
     
   });

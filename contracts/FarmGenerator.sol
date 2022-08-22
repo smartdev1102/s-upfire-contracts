@@ -254,4 +254,5 @@ contract FarmGenerator is Ownable {
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
     }
+
 }
