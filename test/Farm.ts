@@ -27,19 +27,9 @@ describe("Farm", function () {
   describe("add pool", function () {
     it("Should send 5% fee to dev address", async function () {
       const {mockToken, generator, owner, user1, user2 } = await loadFixture(deployFixture);
+      const now = Math.ceil(Date.now() / 1000);
+      await mockToken.approve(generator.address, parseEther("1000"));
       
-      const hash = await generator.getMessageHash(
-        user1.address,
-        parseEther("10"),
-        "111"
-      );
-      const sig = await user1.signMessage(utils.arrayify(hash));
-      await generator.connect(user1).storeReferralInfo(
-        sig,
-        parseEther("10"),
-        mockToken.address
-      );
-      await generator.connect(user2).claimReferral(user1.address, "111");
     });
     
   });
