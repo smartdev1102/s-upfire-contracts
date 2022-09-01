@@ -12,6 +12,9 @@ import "./interfaces/IFactory.sol";
 import "./interfaces/IUniFactory.sol";
 import "./interfaces/IUniswapV2Pair.sol";
 
+import "./interfaces/IUniswapV3Factory.sol";
+import "./interfaces/IUniswapV3Pool.sol";
+
 import "./Farm.sol";
 
 contract FarmGenerator is Ownable {
@@ -19,6 +22,7 @@ contract FarmGenerator is Ownable {
     using SafeERC20 for IERC20;
     IFactory public factory;
     IUniFactory public uniswapFactory;
+    IUniswapV3Factory public uniswapFactoryV3;
 
     address payable devaddr;
  
@@ -45,7 +49,7 @@ contract FarmGenerator is Ownable {
         uint256 referralFee;
     }
 
-    constructor(IFactory _factory, IUniFactory _uniswapFactory) {
+    constructor(IFactory _factory, IUniFactory _uniswapFactory, IUniswapV3Factory _uniswapFactoryV3) {
         factory = _factory;
         devaddr = payable(msg.sender);
         // gFees.useGasToken = false;
@@ -53,6 +57,7 @@ contract FarmGenerator is Ownable {
         // gFees.ethFee = 2e17;
         gFees.tokenFee = 50; // 5%
         uniswapFactory = _uniswapFactory;
+        uniswapFactoryV3 = _uniswapFactoryV3;
         gFees.referralFee = 10; // 1%
     }
 
@@ -92,12 +97,11 @@ contract FarmGenerator is Ownable {
         uint256 _startBlock,
         uint256 _bonusEndBlock,
         uint256 _bonus,
-        address _referralAddress
+        bool _referral
     )
         public
         view
         returns (
-            uint256,
             uint256,
             uint256,
             uint256
@@ -123,21 +127,19 @@ contract FarmGenerator is Ownable {
             nonBonusBlocks
         );
         uint256 requiredAmount = _blockReward.mul(effectiveBlocks);
-        if (_referralAddress != address(0)) {
+        if (_referral) {
             return (
                 params.endBlock,
                 requiredAmount,
                 requiredAmount.mul(gFees.tokenFee.sub(gFees.referralFee)).div(
                     1000
-                ),
-                requiredAmount.mul(gFees.referralFee.div(2)).div(1000)
+                )
             );
         } else {
             return (
                 params.endBlock,
                 requiredAmount,
-                requiredAmount.mul(gFees.tokenFee).div(1000),
-                0
+                requiredAmount.mul(gFees.tokenFee).div(1000)
             );
         }
     }
@@ -177,7 +179,7 @@ contract FarmGenerator is Ownable {
     /**
      * @notice Creates a new Farm contract and registers it in the FarmFactory.sol. All farming rewards are locked in the Farm Contract
      */
-    function createFarm(
+    function createFarmV2(
         IERC20 _rewardToken,
         uint256 _amount,
         IERC20 _lpToken,
@@ -185,14 +187,15 @@ contract FarmGenerator is Ownable {
         uint256 _startBlock,
         uint256 _bonusEndBlock,
         uint256 _bonus,
-        address _referralAddress
-    ) public payable returns (address) {
+        bool _referral
+    ) public returns (address) {
         require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
         require(_bonus > 0, "BONUS");
         require(address(_rewardToken) != address(0), "TOKEN");
         require(_blockReward > 1000, "BR"); // minimum 1000 divisibility per block reward
 
         // ensure this pair is on uniswap by querying the factory
+
         IUniswapV2Pair lpair = IUniswapV2Pair(address(_lpToken));
         address factoryPairAddress = uniswapFactory.getPair(
             lpair.token0(),
@@ -207,25 +210,16 @@ contract FarmGenerator is Ownable {
         (
             params.endBlock,
             params.requiredAmount,
-            params.amountFee,
-            params.referralFee
+            params.amountFee
         ) = determineEndBlock(
             _amount,
             _blockReward,
             _startBlock,
             _bonusEndBlock,
             _bonus,
-            _referralAddress
+            _referral
         );
-
-        if(params.referralFee > 0) {
-            _rewardToken.safeTransferFrom(
-                address(msg.sender),
-                _referralAddress,
-                params.referralFee
-            );
-        }
-        _rewardToken.safeTransferFrom(
+        _rewardToken.transferFrom(
             address(msg.sender),
             devaddr,
             params.amountFee
@@ -255,4 +249,73 @@ contract FarmGenerator is Ownable {
         return (address(newFarm));
     }
 
+    function createFarmV3(
+        IERC20 _rewardToken,
+        uint256 _amount,
+        IERC20 _lpToken,
+        uint256 _blockReward,
+        uint256 _startBlock,
+        uint256 _bonusEndBlock,
+        uint256 _bonus,
+        bool _referral
+    ) public returns (address) {
+        require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
+        require(_bonus > 0, "BONUS");
+        require(address(_rewardToken) != address(0), "TOKEN");
+        require(_blockReward > 1000, "BR"); // minimum 1000 divisibility per block reward
+
+        // ensure this pair is on uniswap by querying the factory
+        IUniswapV3Pool lpool = IUniswapV3Pool(address(_lpToken));
+        address factoryPoolAddress = uniswapFactoryV3.getPool(
+            lpool.token0(),
+            lpool.token1(),
+            lpool.fee()
+        );
+        require(
+            factoryPoolAddress == address(_lpToken),
+            "This pair is not on uniswap"
+        );
+
+        FarmParameters memory params;
+        (
+            params.endBlock,
+            params.requiredAmount,
+            params.amountFee
+        ) = determineEndBlock(
+            _amount,
+            _blockReward,
+            _startBlock,
+            _bonusEndBlock,
+            _bonus,
+            _referral
+        );
+        _rewardToken.transferFrom(
+            address(msg.sender),
+            devaddr,
+            params.amountFee
+        );
+        
+        Farm newFarm = new Farm(address(factory), address(this));
+        require(
+            _rewardToken.transferFrom(
+                msg.sender,
+                address(newFarm),
+                params.requiredAmount
+            ),
+            "Token transfer failed."
+        );
+        newFarm.init(
+            _rewardToken,
+            params.requiredAmount,
+            _lpToken,
+            _blockReward,
+            _startBlock,
+            params.endBlock,
+            _bonusEndBlock,
+            _bonus
+        );
+
+        factory.registerFarm(address(newFarm));
+        return (address(newFarm));
+    }
 }
