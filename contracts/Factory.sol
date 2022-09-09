@@ -9,6 +9,7 @@ contract Factory is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
     
     EnumerableSet.AddressSet private farms;
+    EnumerableSet.AddressSet private farmsV3;
     EnumerableSet.AddressSet private farmGenerators;
     
     mapping(address => EnumerableSet.AddressSet) private userFarms;
@@ -28,6 +29,11 @@ contract Factory is Ownable {
         require(farmGenerators.contains(msg.sender), 'FORBIDDEN');
         farms.add(_farmAddress);
     }
+
+    function registerFarmV3 (address _farmAddress) public {
+        require(farmGenerators.contains(msg.sender), 'FORBIDDEN');
+        farmsV3.add(_farmAddress);
+    }
     
     /**
      * @notice Number of allowed FarmGenerators
@@ -35,7 +41,7 @@ contract Factory is Ownable {
     function farmGeneratorsLength() external view returns (uint256) {
         return farmGenerators.length();
     }
-    
+     
     /**
      * @notice Gets the address of a registered FarmGenerator at specifiex index
      */
@@ -49,6 +55,10 @@ contract Factory is Ownable {
     function farmsLength() external view returns (uint256) {
         return farms.length();
     }
+
+    function farmsLengthV3() external view returns (uint256) {
+        return farmsV3.length();
+    }
     
     /**
      * @notice gets a farm at a specific index. Although using Enumerable Set, since farms are only added and not removed this will never change
@@ -58,6 +68,10 @@ contract Factory is Ownable {
         return farms.at(_index);
     }
     
+    function farmAtIndexV3(uint256 _index) external view returns (address) {
+        return farmsV3.at(_index);
+    }
+
     /**
      * @notice called by a Farm contract when lp token balance changes from 0 to > 0 to allow tracking all farms a user is active in
      */
