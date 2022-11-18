@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity 0.8.9;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -187,6 +187,7 @@ contract FarmGenerator is Ownable {
         uint256 _startBlock,
         uint256 _bonusEndBlock,
         uint256 _bonus,
+        uint256 _lockPeriod,
         bool _referral
     ) public returns (address) {
         require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
@@ -234,88 +235,95 @@ contract FarmGenerator is Ownable {
             ),
             "Token transfer failed."
         );
+
+        Farm.FarmInfo memory farmInfo;
+        farmInfo.rewardToken = _rewardToken;
+        farmInfo.farmableSupply = params.requiredAmount;
+        farmInfo.lpToken = _lpToken;
+        farmInfo.blockReward = _blockReward;
+        farmInfo.startBlock = _startBlock;
+        farmInfo.endBlock = params.endBlock;
+        farmInfo.bonusEndBlock = _bonusEndBlock;
+        farmInfo.bonus = _bonus;
+        farmInfo.lockPeriod = _lockPeriod;
+        
         newFarm.init(
-            _rewardToken,
-            params.requiredAmount,
-            _lpToken,
-            _blockReward,
-            _startBlock,
-            params.endBlock,
-            _bonusEndBlock,
-            _bonus
+            farmInfo
         );
 
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
     }
 
-    function createFarmV3(
-        IERC20 _rewardToken,
-        uint256 _amount,
-        IERC20 _lpToken,
-        uint256 _blockReward,
-        uint256 _startBlock,
-        uint256 _bonusEndBlock,
-        uint256 _bonus,
-        bool _referral
-    ) public returns (address) {
-        require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
-        require(_bonus > 0, "BONUS");
-        require(address(_rewardToken) != address(0), "TOKEN");
-        require(_blockReward > 1000, "BR"); // minimum 1000 divisibility per block reward
+    // function createFarmV3(
+    //     IERC20 _rewardToken,
+    //     uint256 _amount,
+    //     IERC20 _lpToken,
+    //     uint256 _blockReward,
+    //     uint256 _startBlock,
+    //     uint256 _bonusEndBlock,
+    //     uint256 _bonus,
+    //     uint256 _lockPeriod,
+    //     bool _referral
+    // ) public returns (address) {
+    //     require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
+    //     require(_bonus > 0, "BONUS");
+    //     require(address(_rewardToken) != address(0), "TOKEN");
+    //     require(_blockReward > 1000, "BR"); // minimum 1000 divisibility per block reward
 
-        // ensure this pair is on uniswap by querying the factory
-        IUniswapV3Pool lpool = IUniswapV3Pool(address(_lpToken));
-        address factoryPoolAddress = uniswapFactoryV3.getPool(
-            lpool.token0(),
-            lpool.token1(),
-            lpool.fee()
-        );
-        require(
-            factoryPoolAddress == address(_lpToken),
-            "This pair is not on uniswap"
-        );
+    //     // ensure this pair is on uniswap by querying the factory
+    //     IUniswapV3Pool lpool = IUniswapV3Pool(address(_lpToken));
+    //     address factoryPoolAddress = uniswapFactoryV3.getPool(
+    //         lpool.token0(),
+    //         lpool.token1(),
+    //         lpool.fee()
+    //     );
+    //     require(
+    //         factoryPoolAddress == address(_lpToken),
+    //         "This pair is not on uniswap"
+    //     );
 
-        FarmParameters memory params;
-        (
-            params.endBlock,
-            params.requiredAmount,
-            params.amountFee
-        ) = determineEndBlock(
-            _amount,
-            _blockReward,
-            _startBlock,
-            _bonusEndBlock,
-            _bonus,
-            _referral
-        );
-        _rewardToken.transferFrom(
-            address(msg.sender),
-            devaddr,
-            params.amountFee
-        );
+    //     FarmParameters memory params;
+    //     (
+    //         params.endBlock,
+    //         params.requiredAmount,
+    //         params.amountFee
+    //     ) = determineEndBlock(
+    //         _amount,
+    //         _blockReward,
+    //         _startBlock,
+    //         _bonusEndBlock,
+    //         _bonus,
+    //         _referral
+    //     );
+    //     _rewardToken.transferFrom(
+    //         address(msg.sender),
+    //         devaddr,
+    //         params.amountFee
+    //     );
         
-        Farm newFarm = new Farm(address(factory), address(this));
-        require(
-            _rewardToken.transferFrom(
-                msg.sender,
-                address(newFarm),
-                params.requiredAmount
-            ),
-            "Token transfer failed."
-        );
-        newFarm.init(
-            _rewardToken,
-            params.requiredAmount,
-            _lpToken,
-            _blockReward,
-            _startBlock,
-            params.endBlock,
-            _bonusEndBlock,
-            _bonus
-        );
+    //     Farm newFarm = new Farm(address(factory), address(this));
+    //     require(
+    //         _rewardToken.transferFrom(
+    //             msg.sender,
+    //             address(newFarm),
+    //             params.requiredAmount
+    //         ),
+    //         "Token transfer failed."
+    //     );
+    //     newFarm.init(
+    //         _rewardToken,
+    //         params.requiredAmount,
+    //         _lpToken,
+    //         _blockReward,
+    //         _startBlock,
+    //         params.endBlock,
+    //         _bonusEndBlock,
+    //         _bonus,
+    //         _lockPeriod
+    //     );
 
-        factory.registerFarmV3(address(newFarm));
-        return (address(newFarm));
-    }
+    //     factory.registerFarmV3(address(newFarm));
+    //     return (address(newFarm));
+    // }
 }

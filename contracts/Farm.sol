@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: UNLICENSED
 
-pragma solidity 0.8.9;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -15,6 +15,8 @@ contract Farm {
     struct UserInfo {
         uint256 amount; // How many LP tokens the user has provided.
         uint256 rewardDebt; // Reward debt.
+        uint256 unlockPeriod;
+        uint256 depositTime;
     }
 
     /// @notice all the settings for this farm in one struct
@@ -30,10 +32,8 @@ contract Farm {
         uint256 accRewardPerShare; // Accumulated Rewards per share, times 1e12
         uint256 farmableSupply; // set in init, total amount of tokens farmable
         uint256 numFarmers;
+        uint256 lockPeriod;
     }
-
-    /// @notice farm type id. Useful for back-end systems to know how to read the contract (ABI) as we plan to launch multiple farm types
-    uint256 public farmType = 1;
 
     IFactory public factory;
     address public farmGenerator;
@@ -56,14 +56,7 @@ contract Farm {
      * @notice initialize the farming contract. This is called only once upon farm creation and the FarmGenerator ensures the farm has the correct paramaters
      */
     function init(
-        IERC20 _rewardToken,
-        uint256 _amount,
-        IERC20 _lpToken,
-        uint256 _blockReward,
-        uint256 _startBlock,
-        uint256 _endBlock,
-        uint256 _bonusEndBlock,
-        uint256 _bonus
+        FarmInfo memory _farmInfo
     ) public {
         require(msg.sender == address(farmGenerator), "FORBIDDEN");
 
@@ -72,22 +65,23 @@ contract Farm {
         //     address(this),
         //     _amount
         // );
-        farmInfo.rewardToken = _rewardToken;
+        farmInfo.rewardToken = _farmInfo.rewardToken;
 
-        farmInfo.startBlock = _startBlock;
-        farmInfo.blockReward = _blockReward;
-        farmInfo.bonusEndBlock = _bonusEndBlock;
-        farmInfo.bonus = _bonus;
+        farmInfo.startBlock = _farmInfo.startBlock;
+        farmInfo.blockReward = _farmInfo.blockReward;
+        farmInfo.bonusEndBlock = _farmInfo.bonusEndBlock;
+        farmInfo.bonus = _farmInfo.bonus;
 
-        uint256 lastRewardBlock = block.number > _startBlock
+        uint256 lastRewardBlock = block.number > _farmInfo.startBlock
             ? block.number
-            : _startBlock;
-        farmInfo.lpToken = _lpToken;
+            : _farmInfo.startBlock;
+        farmInfo.lpToken = _farmInfo.lpToken;
         farmInfo.lastRewardBlock = lastRewardBlock;
         farmInfo.accRewardPerShare = 0;
 
-        farmInfo.endBlock = _endBlock;
-        farmInfo.farmableSupply = _amount;
+        farmInfo.endBlock = _farmInfo.endBlock;
+        farmInfo.farmableSupply = _farmInfo.farmableSupply;
+        farmInfo.lockPeriod = _farmInfo.lockPeriod;
     }
 
     /**
@@ -136,8 +130,12 @@ contract Farm {
                 tokenReward.mul(1e12).div(lpSupply)
             );
         }
-        return
-            user.amount.mul(accRewardPerShare).div(1e12).sub(user.rewardDebt);
+        uint256 reward = user.amount.mul(accRewardPerShare).div(1e12).sub(user.rewardDebt);
+        if(user.unlockPeriod > 0) {
+            reward = reward.mul(user.unlockPeriod.div(farmInfo.lockPeriod));
+        }
+        return reward;
+            
     }
 
     /**
@@ -193,7 +191,14 @@ contract Farm {
         );
         user.amount = user.amount.add(_amount);
         user.rewardDebt = user.amount.mul(farmInfo.accRewardPerShare).div(1e12);
+        user.unlockPeriod = 0;
+        user.depositTime = block.timestamp;
         emit Deposit(msg.sender, _amount);
+    }
+
+    function lock(uint256 _period) public {
+        UserInfo storage user = userInfo[msg.sender];
+        user.unlockPeriod = _period;
     }
 
     /**
@@ -203,6 +208,7 @@ contract Farm {
     function withdraw(uint256 _amount) public {
         UserInfo storage user = userInfo[msg.sender];
         require(user.amount >= _amount, "INSUFFICIENT");
+        require(user.unlockPeriod + user.depositTime <= block.timestamp, "You can't withdraw now.");
         updatePool();
         if (user.amount == _amount && _amount > 0) {
             factory.userLeftFarm(msg.sender);
@@ -213,6 +219,10 @@ contract Farm {
             .mul(farmInfo.accRewardPerShare)
             .div(1e12)
             .sub(user.rewardDebt);
+        // calculate booster
+        if(user.unlockPeriod > 0) {
+            pending = pending.mul(user.unlockPeriod.div(farmInfo.lockPeriod));
+        }
         safeRewardTransfer(msg.sender, pending);
         user.amount = user.amount.sub(_amount);
         user.rewardDebt = user.amount.mul(farmInfo.accRewardPerShare).div(1e12);
