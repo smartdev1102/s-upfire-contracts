@@ -22,6 +22,8 @@ contract Pool is ReentrancyGuard {
 
     uint256 public aprPercent = 15;
 
+    uint256 public stakersCount;
+
     constructor(
         address _token,
         address _rewardToken,
@@ -43,6 +45,7 @@ contract Pool is ReentrancyGuard {
         if (reward > 0) {
             rewardToken.safeTransfer(msg.sender, reward);
         }
+        uint256 deposit = deposits[msg.sender];
         deposits[msg.sender] = deposits[msg.sender] + amount;
         lastUpdate[msg.sender] = block.timestamp;
         token.safeTransferFrom(msg.sender, ownAddr, amount.mul(fee).div(1000));
@@ -51,6 +54,9 @@ contract Pool is ReentrancyGuard {
             address(this),
             amount.sub(amount.mul(fee).div(1000))
         );
+        if (deposit == 0) {
+            stakersCount += 1;
+        }
     }
 
     function unstake(uint256 amount) public virtual {
@@ -61,6 +67,9 @@ contract Pool is ReentrancyGuard {
         uint256 reward = pendingReward(msg.sender);
         if (reward > 0) {
             rewardToken.safeTransfer(msg.sender, reward);
+        }
+        if (deposits[msg.sender] == amount) {
+            stakersCount -= 1;
         }
         deposits[msg.sender] -= amount;
         lastUpdate[msg.sender] = block.timestamp;
@@ -82,5 +91,9 @@ contract Pool is ReentrancyGuard {
             rewardToken.transfer(msg.sender, reward);
         }
         lastUpdate[msg.sender] = block.timestamp;
+    }
+
+    function getStakerCount() external view returns (uint256) {
+        return stakersCount;
     }
 }

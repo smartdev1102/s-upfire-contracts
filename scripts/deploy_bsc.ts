@@ -9,12 +9,12 @@ async function main() {
 
   // console.log("factory => ",factory.address);
 
-  const Generator = await ethers.getContractFactory("FarmGenerator");
-  const generator = await Generator.deploy("0xde5acb34431d907d7D018a6f027A57F8Ca3d9280",
-    "0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc", "0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"
-  );
-  await generator.deployed();
-  console.log("generator => ", generator.address);
+  // const Generator = await ethers.getContractFactory("FarmGenerator");
+  // const generator = await Generator.deploy(factory.address,
+  //   "0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc", "0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"
+  // );
+  // await generator.deployed();
+  // console.log("generator => ", generator.address);
 
   // await factory.adminAllowFarmGenerator(generator.address, true);
 
@@ -22,18 +22,18 @@ async function main() {
   // const token = await Token.deploy(parseEther("1000000"));
   // await token.deployed();
   // console.log("reward token => ", token.address);
-  // const Factory = await ethers.getContractFactory("PoolFactory");
-  // const factory = await Factory.deploy();
-  // await factory.deployed();
+  const Factory = await ethers.getContractFactory("PoolFactory");
+  const factory = await Factory.deploy();
+  await factory.deployed();
 
-  // console.log("pool factory => ", factory.address);
+  console.log("pool factory => ", factory.address);
 
-  // const Generator = await ethers.getContractFactory("PoolGenerator");
-  // const generator = await Generator.deploy(factory.address, owner.address);
-  // await generator.deployed();
-  // await factory.adminAllowPoolGenerator(generator.address, true);
+  const Generator = await ethers.getContractFactory("PoolGenerator");
+  const generator = await Generator.deploy(factory.address, owner.address);
+  await generator.deployed();
+  await factory.adminAllowPoolGenerator(generator.address, true);
   
-  // console.log("pool generator => ", generator.address);
+  console.log("pool generator => ", generator.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
