@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 /// @title The interface for the Uniswap V3 Factory

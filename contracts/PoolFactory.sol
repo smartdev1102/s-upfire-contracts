@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
-
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -94,5 +93,4 @@ contract PoolFactory is Ownable {
         EnumerableSet.AddressSet storage set = userPools[_user];
         return set.at(_index);
     }
-    
 }

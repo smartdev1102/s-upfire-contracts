@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
-
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -24,8 +23,8 @@ contract FarmGenerator is Ownable {
     IUniFactory public uniswapFactory;
     IUniswapV3Factory public uniswapFactoryV3;
 
-    address payable devaddr;
- 
+    address public devaddr;
+
     struct FeeStruct {
         IERCBurn gasToken;
         bool useGasToken; // set to false to waive the gas fee
@@ -49,12 +48,18 @@ contract FarmGenerator is Ownable {
         uint256 referralFee;
     }
 
-    constructor(IFactory _factory, IUniFactory _uniswapFactory, IUniswapV3Factory _uniswapFactoryV3) {
+    constructor(
+        IFactory _factory,
+        IUniFactory _uniswapFactory,
+        IUniswapV3Factory _uniswapFactoryV3,
+        address _devAddr,
+        uint256 _ethFee
+    ) {
         factory = _factory;
-        devaddr = payable(msg.sender);
+        devaddr = _devAddr;
         // gFees.useGasToken = false;
         // gFees.gasFee = 1 * (10**18);
-        // gFees.ethFee = 2e17;
+        gFees.ethFee = _ethFee;
         gFees.tokenFee = 50; // 5%
         uniswapFactory = _uniswapFactory;
         uniswapFactoryV3 = _uniswapFactoryV3;
@@ -84,7 +89,7 @@ contract FarmGenerator is Ownable {
         gFees.useGasToken = _useGasToken;
     }
 
-    function setDev(address payable _devaddr) public onlyOwner {
+    function setDev(address _devaddr) public onlyOwner {
         devaddr = _devaddr;
     }
 
@@ -189,11 +194,12 @@ contract FarmGenerator is Ownable {
         uint256 _bonus,
         uint256 _lockPeriod,
         bool _referral
-    ) public returns (address) {
+    ) external payable returns (address) {
         require(_startBlock > block.number, "START"); // ideally at least 24 hours more to give farmers time
         require(_bonus > 0, "BONUS");
         require(address(_rewardToken) != address(0), "TOKEN");
         require(_blockReward > 1000, "BR"); // minimum 1000 divisibility per block reward
+        require(msg.value >= gFees.ethFee, "Insufficient amount");
 
         // ensure this pair is on uniswap by querying the factory
 
@@ -225,7 +231,7 @@ contract FarmGenerator is Ownable {
             devaddr,
             params.amountFee
         );
-        
+
         Farm newFarm = new Farm(address(factory), address(this));
         require(
             _rewardToken.transferFrom(
@@ -246,14 +252,21 @@ contract FarmGenerator is Ownable {
         farmInfo.bonusEndBlock = _bonusEndBlock;
         farmInfo.bonus = _bonus;
         farmInfo.lockPeriod = _lockPeriod;
-        
-        newFarm.init(
-            farmInfo
-        );
+
+        newFarm.init(farmInfo);
 
         factory.registerFarm(address(newFarm));
         return (address(newFarm));
     }
+
+    function withdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "Insufficient amount");
+        (bool success, ) = payable(devaddr).call{value: balance}("");
+        require(success, "Failed fee transfer");
+    }
+    
+    receive() external payable {}
 
     // function createFarmV3(
     //     IERC20 _rewardToken,
@@ -301,7 +314,7 @@ contract FarmGenerator is Ownable {
     //         devaddr,
     //         params.amountFee
     //     );
-        
+
     //     Farm newFarm = new Farm(address(factory), address(this));
     //     require(
     //         _rewardToken.transferFrom(

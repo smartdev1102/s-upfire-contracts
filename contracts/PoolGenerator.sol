@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
-
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -11,28 +10,67 @@ import "./Pool.sol";
 import "./interfaces/IPoolFactory.sol";
 
 contract PoolGenerator is Ownable {
-  using SafeMath for uint256;
+    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-  IPoolFactory public factory;
-  address public devAddr;
-  uint256 public fee = 50;
+    IPoolFactory public factory;
+    address public devaddr;
+    uint256 public tokenFee = 50;
+    uint256 public ethFee;
 
-  constructor (IPoolFactory _factory, address _devAddr) {
-    factory = _factory;
-    devAddr = _devAddr;
-  }
+    constructor(IPoolFactory _factory, address _devAddr, uint256 _ethFee) {
+        factory = _factory;
+        devaddr = _devAddr;
+        ethFee = _ethFee;
+    }
 
-  function createPool (
-    address _rewardToken,
-    address _lpToken,
-    uint256 _aprPercent,
-    uint256 _amount
-  ) public returns (address){
-    Pool newPool = new Pool(_lpToken, _rewardToken, msg.sender, _aprPercent);
-    IERC20(_rewardToken).safeTransferFrom(msg.sender, devAddr, _amount.mul(fee).div(1000));
-    IERC20(_rewardToken).safeTransferFrom(msg.sender, address(newPool), _amount.mul(fee).div(1000));
-    factory.registerPool(address(newPool));
-    return address(newPool);
-  }
+    function setTokenFee(uint256 _tokenFee) external onlyOwner {
+        tokenFee = _tokenFee;
+    }
+
+    function setEthFee(uint256 _ethFee) external onlyOwner {
+        ethFee = _ethFee;
+    }
+
+    function setDev(address _devaddr) external onlyOwner {
+        devaddr = _devaddr;
+    }
+
+    function createPool(
+        address _rewardToken,
+        address _lpToken,
+        uint256 _aprPercent,
+        uint256 _amount
+    ) external payable returns (address) {
+        require(msg.value >= ethFee, "Insufficient amount");
+
+        Pool newPool = new Pool(
+            _lpToken,
+            _rewardToken,
+            msg.sender,
+            _aprPercent
+        );
+        IERC20(_rewardToken).safeTransferFrom(
+            msg.sender,
+            devaddr,
+            _amount.mul(tokenFee).div(1000)
+        );
+        IERC20(_rewardToken).safeTransferFrom(
+            msg.sender,
+            address(newPool),
+            _amount.mul(1000 - tokenFee).div(1000)
+        );
+
+        factory.registerPool(address(newPool));
+        return address(newPool);
+    }
+
+    function withdraw() external onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "Insufficient amount");
+        (bool success, ) = payable(devaddr).call{value: balance}("");
+        require(success, "Failed fee transfer");
+    }
+
+    receive() external payable {}
 }
