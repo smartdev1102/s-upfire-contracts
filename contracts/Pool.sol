@@ -17,22 +17,31 @@ contract Pool is ReentrancyGuard {
     address public ownAddr;
 
     mapping(address => uint256) public deposits;
+    mapping(address => uint256) public depositTime;
     mapping(address => uint256) public lastUpdate;
 
     uint256 public aprPercent = 15;
-
+    uint256 public lockPeriod;
+    uint256 public bonus = 1;
+    uint256 public bonusEndBlock;
     uint256 public stakersCount;
 
     constructor(
         address _token,
         address _rewardToken,
         address _owner,
-        uint256 _aprPercent
+        uint256 _aprPercent,
+        uint256 _lockPeriod,
+        uint256 _bonus,
+        uint256 _bonusEndBlock
     ) {
         token = IERC20(_token);
         rewardToken = IERC20(_rewardToken);
         ownAddr = _owner;
         aprPercent = _aprPercent;
+        lockPeriod = _lockPeriod;
+        bonus = _bonus;
+        bonusEndBlock = _bonusEndBlock;
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -41,21 +50,26 @@ contract Pool is ReentrancyGuard {
 
     function stake(uint256 amount) public virtual {
         uint256 reward = pendingReward(msg.sender);
-        if (reward > 0) {
+        if (reward > 0 && lockPeriod + depositTime[msg.sender] <= block.timestamp) {
             rewardToken.safeTransfer(msg.sender, reward);
+            lastUpdate[msg.sender] = block.timestamp;
         }
-        uint256 deposit = deposits[msg.sender];
+        
+        if (deposits[msg.sender] == 0) {
+            depositTime[msg.sender] = block.timestamp;
+        }
+
+        if (depositTime[msg.sender] == 0) {
+            stakersCount += 1;
+        }
+
         deposits[msg.sender] = deposits[msg.sender] + amount;
-        lastUpdate[msg.sender] = block.timestamp;
         token.safeTransferFrom(msg.sender, ownAddr, amount.mul(fee).div(1000));
         token.safeTransferFrom(
             msg.sender,
             address(this),
             amount.sub(amount.mul(fee).div(1000))
         );
-        if (deposit == 0) {
-            stakersCount += 1;
-        }
     }
 
     function unstake(uint256 amount) public virtual {
@@ -63,6 +77,8 @@ contract Pool is ReentrancyGuard {
             deposits[msg.sender] >= amount,
             "Not enough user balance to withdraw"
         );
+        require(lockPeriod + depositTime[msg.sender] <= block.timestamp, "You can't withdraw now.");
+
         uint256 reward = pendingReward(msg.sender);
         if (reward > 0) {
             rewardToken.safeTransfer(msg.sender, reward);
@@ -77,14 +93,17 @@ contract Pool is ReentrancyGuard {
 
     function pendingReward(address account) public view returns (uint256) {
         uint256 stakedTime = block.timestamp - lastUpdate[account];
-        return
-            deposits[account].mul(aprPercent).div(1000).mul(stakedTime).div(
-                30 days
-            );
+        uint256 bonusTime;
+        if (block.timestamp >= bonusEndBlock && lastUpdate[account] <= bonusEndBlock) {
+            bonusTime = block.timestamp - bonusEndBlock;
+        }
+        uint256 reward = deposits[account].mul(aprPercent).div(1000).mul(stakedTime + bonusTime * bonus).div(30 days);
+        return reward;
     }
 
     function harvest() external {
         require(deposits[msg.sender] > 0, "No balance to withdraw");
+        require(lockPeriod + depositTime[msg.sender] <= block.timestamp, "You can't withdraw now.");
         uint256 reward = pendingReward(msg.sender);
         if (reward > 0) {
             rewardToken.transfer(msg.sender, reward);
