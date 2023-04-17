@@ -40,7 +40,10 @@ contract PoolGenerator is Ownable {
         address _rewardToken,
         address _lpToken,
         uint256 _aprPercent,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _lockPeriod,
+        uint256 _bonus,
+        uint256 _bonusEndBlock
     ) external payable returns (address) {
         require(msg.value >= ethFee, "Insufficient amount");
 
@@ -48,7 +51,10 @@ contract PoolGenerator is Ownable {
             _lpToken,
             _rewardToken,
             msg.sender,
-            _aprPercent
+            _aprPercent,
+            _lockPeriod,
+            _bonus,
+            _bonusEndBlock
         );
         IERC20(_rewardToken).safeTransferFrom(
             msg.sender,

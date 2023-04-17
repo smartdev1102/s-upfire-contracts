@@ -22,7 +22,7 @@ contract Pool is ReentrancyGuard {
 
     uint256 public aprPercent = 15;
     uint256 public lockPeriod;
-    uint256 public bonus = 1;
+    uint256 public bonus = 100;
     uint256 public bonusEndBlock;
     uint256 public stakersCount;
 
@@ -97,7 +97,7 @@ contract Pool is ReentrancyGuard {
         if (block.timestamp >= bonusEndBlock && lastUpdate[account] <= bonusEndBlock) {
             bonusTime = block.timestamp - bonusEndBlock;
         }
-        uint256 reward = deposits[account].mul(aprPercent).div(1000).mul(stakedTime + bonusTime * bonus).div(30 days);
+        uint256 reward = deposits[account].mul(aprPercent).div(1000).mul(stakedTime + (bonusTime * bonus).div(100)).div(30 days);
         return reward;
     }
 
