@@ -21,7 +21,7 @@ async function main() {
         fFactoryAddress = "0x5997c902700D4a35456ee6BEC69699E2F57486F1";
         swapFactory = "0xefa94DE7a4656D787667C749f7E1223D71E9FD88";
     } else if (chainId === 56) {
-        fFactoryAddress = "0xD2fc6F5cFAbd74E0db78BE3449C6cf1059f863DF";
+        fFactoryAddress = "0xd9394b2C3fc7d4C22A42B9930c025c79B3f364Cb";
         swapFactory = "0xcA143Ce32Fe78f1f7019d7d551a6402fC5350c73";
     }
 
