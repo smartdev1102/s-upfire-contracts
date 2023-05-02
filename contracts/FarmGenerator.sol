@@ -106,7 +106,6 @@ contract FarmGenerator is Ownable {
         view
         returns (
             uint256,
-            uint256,
             uint256
         )
     {
@@ -120,24 +119,17 @@ contract FarmGenerator is Ownable {
             _startBlock
         );
 
-        uint256 nonBonusBlocks = params.endBlock.sub(_bonusEndBlock);
-        uint256 effectiveBlocks = params.bonusBlocks.mul(_bonus).add(
-            nonBonusBlocks
-        );
-        uint256 requiredAmount = _blockReward.mul(effectiveBlocks);
         if (_referral) {
             return (
                 params.endBlock,
-                requiredAmount,
-                requiredAmount.mul(gFees.tokenFee.sub(gFees.referralFee)).div(
+                _amount.mul(gFees.tokenFee.sub(gFees.referralFee)).div(
                     1000
                 )
             );
         } else {
             return (
                 params.endBlock,
-                requiredAmount,
-                requiredAmount.mul(gFees.tokenFee).div(1000)
+                _amount.mul(gFees.tokenFee).div(1000)
             );
         }
     }
@@ -207,7 +199,6 @@ contract FarmGenerator is Ownable {
         FarmParameters memory params;
         (
             params.endBlock,
-            params.requiredAmount,
             params.amountFee
         ) = determineEndBlock(
             _amount,
@@ -224,18 +215,20 @@ contract FarmGenerator is Ownable {
         );
 
         Farm newFarm = new Farm(address(factory), address(this));
+        uint256 supplyAmount = _amount;
+
         require(
             _rewardToken.transferFrom(
                 msg.sender,
                 address(newFarm),
-                params.requiredAmount
+                supplyAmount
             ),
             "Token transfer failed."
         );
 
         Farm.FarmInfo memory farmInfo;
         farmInfo.rewardToken = _rewardToken;
-        farmInfo.farmableSupply = params.requiredAmount;
+        farmInfo.farmableSupply = _amount;
         farmInfo.lpToken = _lpToken;
         farmInfo.blockReward = _blockReward;
         farmInfo.startBlock = _startBlock;
