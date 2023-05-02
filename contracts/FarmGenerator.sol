@@ -37,8 +37,6 @@ contract FarmGenerator is Ownable {
     FeeStruct public gFees;
 
     struct FarmParameters {
-        uint256 fee;
-        uint256 amountMinusFee;
         uint256 bonusBlocks;
         uint256 totalBonusReward;
         uint256 numBlocks;
@@ -113,16 +111,11 @@ contract FarmGenerator is Ownable {
         )
     {
         FarmParameters memory params;
-        params.fee = _amount.mul(gFees.tokenFee).div(1000);
-        params.amountMinusFee = _amount.sub(params.fee);
         params.bonusBlocks = _bonusEndBlock.sub(_startBlock);
         params.totalBonusReward = params.bonusBlocks.mul(_bonus).mul(
             _blockReward
         );
-        params.numBlocks = params
-            .amountMinusFee
-            .sub(params.totalBonusReward)
-            .div(_blockReward);
+        params.numBlocks = _amount.sub(params.totalBonusReward).div(_blockReward);
         params.endBlock = params.numBlocks.add(params.bonusBlocks).add(
             _startBlock
         );
@@ -167,12 +160,10 @@ contract FarmGenerator is Ownable {
             uint256
         )
     {
-        uint256 fee = _amount.mul(gFees.tokenFee).div(1000);
-        uint256 amountMinusFee = _amount.sub(fee);
         uint256 bonusBlocks = _bonusEndBlock.sub(_startBlock);
         uint256 nonBonusBlocks = _endBlock.sub(_bonusEndBlock);
         uint256 effectiveBlocks = bonusBlocks.mul(_bonus).add(nonBonusBlocks);
-        uint256 blockReward = amountMinusFee.div(effectiveBlocks);
+        uint256 blockReward = _amount.div(effectiveBlocks);
         uint256 requiredAmount = blockReward.mul(effectiveBlocks);
         return (
             blockReward,

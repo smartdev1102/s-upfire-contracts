@@ -43,7 +43,9 @@ contract PoolGenerator is Ownable {
         uint256 _amount,
         uint256 _lockPeriod,
         uint256 _bonus,
-        uint256 _bonusEndBlock
+        uint256 _bonusEndBlock,
+        uint256 _startBlock,
+        uint256 _endBlock
     ) external payable returns (address) {
         require(msg.value >= ethFee, "Insufficient amount");
 
@@ -54,17 +56,21 @@ contract PoolGenerator is Ownable {
             _aprPercent,
             _lockPeriod,
             _bonus,
-            _bonusEndBlock
+            _bonusEndBlock,
+            _startBlock,
+            _endBlock
         );
+
         IERC20(_rewardToken).safeTransferFrom(
             msg.sender,
             devaddr,
             _amount.mul(tokenFee).div(1000)
         );
+
         IERC20(_rewardToken).safeTransferFrom(
             msg.sender,
             address(newPool),
-            _amount.mul(1000 - tokenFee).div(1000)
+            _amount
         );
 
         factory.registerPool(address(newPool));

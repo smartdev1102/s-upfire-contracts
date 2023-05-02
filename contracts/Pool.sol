@@ -25,6 +25,8 @@ contract Pool is ReentrancyGuard {
     uint256 public bonus = 100;
     uint256 public bonusEndBlock;
     uint256 public stakersCount;
+    uint256 public startBlock;
+    uint256 public endBlock;
 
     constructor(
         address _token,
@@ -33,7 +35,9 @@ contract Pool is ReentrancyGuard {
         uint256 _aprPercent,
         uint256 _lockPeriod,
         uint256 _bonus,
-        uint256 _bonusEndBlock
+        uint256 _bonusEndBlock,
+        uint256 _startBlock,
+        uint256 _endBlock
     ) {
         token = IERC20(_token);
         rewardToken = IERC20(_rewardToken);
@@ -42,6 +46,8 @@ contract Pool is ReentrancyGuard {
         lockPeriod = _lockPeriod;
         bonus = _bonus;
         bonusEndBlock = _bonusEndBlock;
+        startBlock = _startBlock;
+        endBlock = _endBlock;
     }
 
     function balanceOf(address account) external view returns (uint256) {
@@ -49,20 +55,30 @@ contract Pool is ReentrancyGuard {
     }
 
     function stake(uint256 amount) public virtual {
+        require(endBlock >= block.timestamp, "Period of use has expired");
+
         uint256 reward = pendingReward(msg.sender);
-        if (reward > 0 && lockPeriod + depositTime[msg.sender] <= block.timestamp) {
+        if (
+            reward > 0 &&
+            lockPeriod + depositTime[msg.sender] <= block.timestamp
+        ) {
             rewardToken.safeTransfer(msg.sender, reward);
-            lastUpdate[msg.sender] = block.timestamp;
-        }
-        
-        if (deposits[msg.sender] == 0) {
-            depositTime[msg.sender] = block.timestamp;
         }
 
         if (depositTime[msg.sender] == 0) {
             stakersCount += 1;
         }
 
+        if (deposits[msg.sender] == 0) {
+            depositTime[msg.sender] = block.timestamp;
+        }
+
+        lastUpdate[msg.sender] = block.timestamp;
+        
+        if (block.timestamp < startBlock) {
+            lastUpdate[msg.sender] = startBlock;
+        }
+        
         deposits[msg.sender] = deposits[msg.sender] + amount;
         token.safeTransferFrom(msg.sender, ownAddr, amount.mul(fee).div(1000));
         token.safeTransferFrom(
@@ -77,7 +93,10 @@ contract Pool is ReentrancyGuard {
             deposits[msg.sender] >= amount,
             "Not enough user balance to withdraw"
         );
-        require(lockPeriod + depositTime[msg.sender] <= block.timestamp, "You can't withdraw now.");
+        require(
+            lockPeriod + depositTime[msg.sender] <= block.timestamp,
+            "You can't withdraw now."
+        );
 
         uint256 reward = pendingReward(msg.sender);
         if (reward > 0) {
@@ -92,18 +111,44 @@ contract Pool is ReentrancyGuard {
     }
 
     function pendingReward(address account) public view returns (uint256) {
-        uint256 stakedTime = block.timestamp - lastUpdate[account];
-        uint256 bonusTime;
-        if (block.timestamp >= bonusEndBlock && lastUpdate[account] <= bonusEndBlock) {
-            bonusTime = block.timestamp - bonusEndBlock;
+        if (block.timestamp < startBlock) {
+            return 0;
         }
-        uint256 reward = deposits[account].mul(aprPercent).div(1000).mul(stakedTime + (bonusTime * bonus).div(100)).div(30 days);
+
+        uint256 stakedTime = block.timestamp - lastUpdate[account];
+        
+        if (block.timestamp > endBlock) {
+            stakedTime = endBlock - lastUpdate[account];
+        }
+
+        uint256 bonusTime;
+
+        if (
+            block.timestamp <= bonusEndBlock &&
+            lastUpdate[account] < block.timestamp
+        ) {
+            bonusTime = block.timestamp - lastUpdate[account];
+        } else if (
+            block.timestamp > bonusEndBlock &&
+            lastUpdate[account] < bonusEndBlock
+        ) {
+            bonusTime = bonusEndBlock - lastUpdate[account];
+        }
+
+        uint256 reward = deposits[account]
+            .mul(aprPercent)
+            .div(1000)
+            .mul(stakedTime + (bonusTime * bonus).div(100))
+            .div(30 days);
         return reward;
     }
 
     function harvest() external {
         require(deposits[msg.sender] > 0, "No balance to withdraw");
-        require(lockPeriod + depositTime[msg.sender] <= block.timestamp, "You can't withdraw now.");
+        require(
+            lockPeriod + depositTime[msg.sender] <= block.timestamp,
+            "You can't withdraw now."
+        );
         uint256 reward = pendingReward(msg.sender);
         if (reward > 0) {
             rewardToken.transfer(msg.sender, reward);
